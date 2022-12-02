@@ -7,30 +7,8 @@ import zipfile
 import pymysql
 import urllib.request
 import osmnx as ox
-import pandas as pd
-import geopandas as gpd
 from os import path, mkdir, listdir
 from ipywidgets import interact_manual, Text, Password
-
-username = None
-password = None
-tables = 'tables'
-datasets = 'datasets'
-maps = 'maps'
-graphs = 'graphs'
-
-
-def create_connection():
-    conn = None
-    try:
-        conn = pymysql.connect(user=username,
-                               passwd=password,
-                               host=config['database_url'],
-                               port=config['port'],
-                               local_infile=1)
-    except Exception as e:
-        print(f"Error connecting to the MariaDB Server: {e}")
-    return conn
 
 
 def initialize_database(conn):
@@ -161,7 +139,7 @@ def upload_postcode_data(conn):
 
 
 def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', outcode=None, latitude=None, longitude=None, boxsize='0.1',
-                            start_date='2013-01-01', end_date='2022-12-31'):
+                            start_date='2013-01-01', end_date=str(this_year) + '-12-31'):
 
     print('Retrieving property data... this may take a while if not cached locally...\n')
 
@@ -216,14 +194,8 @@ def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', 
     for fn in listdir(tables):
         parts = fn.split('#')
         if type_predicate(parts) and date_predicate(parts):
-            df = pd.read_csv(path.join(tables, fn), names=['price', 'date of transfer', 'postcode', 'property type', 'new build flag',
-                                                           'tenure type', 'locality', 'town/city', 'district', 'county', 'country',
-                                                           'latitude', 'longitude'], converters={'latitude': Decimal, 'longitude': Decimal})
-            df = df.loc[df['date of transfer'].map(lambda d: comp_date(start_date, d) and comp_date(d, end_date))]
-            if parts[0] == "coordinate_box_size":
-                df = df.loc[(df['latitude'] >= lat_min) & (df['latitude'] < lat_max) & (df['longitude'] >= lon_min) & (df['longitude'] < lon_max)]
-            df['property type'] = df['property type'].map(property_type_map)
-            return df
+            with open(path.join(tables, fn)) as file:
+                return [line.rstrip() for line in file], False
 
     with conn:
         with conn.cursor() as cur:
@@ -245,10 +217,7 @@ def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', 
                 writer = csv.writer(file, delimiter=',', doublequote=False, lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
                 for row in rows:
                     writer.writerow(row)
-            df = pd.DataFrame(rows, columns=['price', 'date of transfer', 'postcode', 'property type', 'new build flag',
-                              'tenure type', 'locality', 'town/city', 'district', 'county', 'country', 'latitude', 'longitude'])
-            df['property type'] = df['property type'].map(property_type_map)
-            return df
+            return rows, True
 
 
 def road_data(north, south, east, west, network_type, custom_filter):
@@ -265,17 +234,13 @@ def pois_data(north, south, east, west, tags):
         tag_gdf = ox.geometries_from_bbox(north, south, east, west, tag[1])
         tag_gdf['display name'] = tag[0]
         tag_gdfs.append(tag_gdf)
-    pois = gpd.GeoDataFrame(pd.concat(tag_gdfs, ignore_index=True))
-    pois['geometry'] = pois['geometry'].to_crs(3035).centroid
-    pois['geometry'] = pois['geometry'].to_crs(4326)
-    return pois
+    return tag_gdfs
 
 
 def init():
     get_credentials()
     create_directories()
-    conn = create_connection()
-    with conn:
+    with create_connection() as conn:
         initialize_database(conn)
         upload_price_paid_data(conn)
         upload_postcode_data(conn)
