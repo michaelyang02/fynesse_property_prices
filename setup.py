@@ -21,7 +21,7 @@ NAME = "fynesse_property_prices"
 DESCRIPTION = "Fynesse pipeline data analysis for UK property prices with python."
 URL = "https://github.com/michaelyang02/fynesse_property_prices"
 EMAIL = "my385@cam.ac.uk"
-AUTHOR = "Michael Yang, Neil D. Lawrence"
+AUTHOR = "Michael Yang"
 REQUIRES_PYTHON = ">=3.6.0"
 VERSION = "0.1.0"
 
