@@ -89,7 +89,7 @@ def count_poi(p, poi_df, radius):
 
 
 def dist_poi(p, poi_df, radius):
-    dists = poi_df['geometry'].distance(p['geometry'])
+    dists = poi_df['geometry'].distance(p)
     dists = dists[dists < radius]
     if dists.empty:
         return radius

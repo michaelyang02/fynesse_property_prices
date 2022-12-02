@@ -2,6 +2,7 @@ from .config import *
 from . import access
 from .utils import *
 
+from shapely.geometry import Point
 from matplotlib import pyplot as plt
 from IPython.display import display
 import numpy as np
@@ -400,7 +401,7 @@ def view_interactive_graph():
     display(output)
 
 
-def labelled(latitude, longitude, boxsize, radius):
+def labelled(latitude, longitude, boxsize, radius, predict):
     with create_connection() as conn:
         df = prices_coordinates_data(conn, latitude=latitude, longitude=longitude, boxsize=boxsize,
                                      start_date='1995-01-01', end_date=str(this_year)+'-12-31')
@@ -409,7 +410,7 @@ def labelled(latitude, longitude, boxsize, radius):
     ind = [np.where(df['property type'] == pt, 1, 0) for pt in property_types_list]
     ind_day = ind * normalized_day
     ind_day_2 = ind * np.square(normalized_day)
-    ind_day_3 = ind * np.power(normalized_day, 2)
+    ind_day_3 = ind * np.power(normalized_day, 3)
 
     half = Decimal(0.5)
     latitude = Decimal(latitude)
@@ -424,7 +425,16 @@ def labelled(latitude, longitude, boxsize, radius):
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.longitude, df.latitude))
     pois = [pois_data(north, south, east, west, i) for i in config['poi_map'].items()]
 
-    number_of_pois = [gdf.apply(lambda p: count_poi(p, poi, radius), axis=1) for poi in pois]
+    number_of_pois = [gdf.apply(lambda p: count_poi(p['geometry'], poi, radius), axis=1) for poi in pois]
     distance_to_closest_pois = [gdf.apply(lambda p: dist_poi(p, poi, radius), axis=1) for poi in pois]
 
-    return np.column_stack([*ind, *ind_day, *ind_day_2, *ind_day_3, *number_of_pois, *distance_to_closest_pois])
+    (lat, lon, date, ptype) = predict
+    i0 = [1 if ptype == pt else 0 for pt in property_types_list]
+    i1 = i0 * normalize_day(date)
+    i2 = i0 * np.square(normalize_day(date))
+    i3 = i0 * np.power(normalize_day(date), 3)
+    nop = [count_poi(Point(lon, lat), poi, radius) for poi in pois]
+    dtcp = [dist_poi(Point(lon, lat), poi, radius) for poi in pois]
+
+    return (np.column_stack([*ind, *ind_day, *ind_day_2, *ind_day_3, *number_of_pois, *distance_to_closest_pois]),
+            df['price'].to_numpy(), np.column_stack([*i0, *i1, *i2, *i3, *nop, *dtcp]))

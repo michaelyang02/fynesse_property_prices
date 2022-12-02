@@ -1,18 +1,20 @@
-# This file contains code for suporting addressing questions in the data
+from .config import *
+from . import assess
+from .utils import *
 
-"""# Here are some of the imports we might expect 
-import sklearn.model_selection  as ms
-import sklearn.linear_model as lm
-import sklearn.svm as svm
-import sklearn.naive_bayes as naive_bayes
-import sklearn.tree as tree
+import sklearn
 
-import GPy
-import torch
-import tensorflow as tf
 
-# Or if it's a statistical analysis
-import scipy.stats"""
+def predict_price(latitude, longitude, date, property_type):
+    print("Fitting model...\n")
+    model = sklearn.linear_model.LinearRegression(fit_intercept=False)
+    labelled_data = assess.labelled(latitude, longitude, 0.09, 0.09)
 
-"""Address a particular question that arises from the data"""
+    model.fit(labelled_data[0], labelled_data[1])
+    coef = model.coef_
+    print("Fitted model coefficients:\n")
+    print(coef)
+
+    pred = model.predict(labelled_data[3])
+    print(pred)
 
