@@ -1,2 +1,21 @@
-# Place config informatio you want everyone to have here.
-data_url: https://raw.githubusercontent.com/lawrennd/datasets_mirror/main/
+# Place config information you want everyone to have here.
+property_price_data_url_prefix: http://prod.publicdata.landregistry.gov.uk.s3-website-eu-west-1.amazonaws.com/pp-
+postcode_data_url: https://www.getthedata.com/downloads/open_postcode_geo.csv.zip
+
+database_url: database-my385-assessment.cgrre17yxw11.eu-west-2.rds.amazonaws.com
+port: 3306
+
+# Points of Interest (POIs)
+# DISPLAY NAME: OPENSTREETMAP TAG(S)
+# See https://wiki.openstreetmap.org/wiki/Tags for more details
+poi_map: {
+    'School': {'amenity': 'school'},
+    'Clinic': {'amenity': 'clinic'},
+    'Supermarket': {'shop': 'supermarket'},
+    'Mall': {'shop': 'mall'},
+    'Department Store': {'shop': 'department_store'},
+    'Bus Station': {'amenity': 'bus_station'},
+    'Train Station': {'railway': 'station'},
+    'Park': {'leisure': 'park'},
+    'Tourism Accommodation': {'tourism': ['hotel', 'apartment']}
+}

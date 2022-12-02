@@ -19,7 +19,7 @@ if os.path.exists(user_file):
     with open(user_file) as file:
         config.update(yaml.load(file, Loader=yaml.FullLoader))
 
-if config=={}:
+if config == {}:
     raise ValueError(
         "No configuration file found at either "
         + user_file
