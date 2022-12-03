@@ -1,5 +1,3 @@
-from .config import *
-import pymysql
 import datetime
 from decimal import Decimal
 
@@ -42,29 +40,9 @@ type_map = {
     'County': 'county'
 }
 
-username = None
-password = None
-
-
-def create_connection():
-    conn = None
-    try:
-        conn = pymysql.connect(user=username,
-                               passwd=password,
-                               host=config['database_url'],
-                               port=config['port'],
-                               local_infile=1)
-    except Exception as e:
-        print(f"Error connecting to the MariaDB Server: {e}")
-    return conn
-
-
-def normalize_day(date):
-    return datetime.datetime.strptime(date, '%Y-%m-%d') - day_zero
-
-
-def comp_date(earlier, later):
-    return datetime.datetime.strptime(earlier, '%Y-%m-%d') <= datetime.datetime.strptime(later, '%Y-%m-%d')
+table_column_list = ['price', 'date of transfer', 'postcode', 'property type', 'new build flag',
+                     'tenure type', 'locality', 'town/city', 'district', 'county', 'country',
+                     'latitude', 'longitude']
 
 
 def get_filename(area_type='town_city', area_name='CAMBRIDGE', outcode=None, latitude=None, longitude=None,
@@ -79,19 +57,34 @@ def get_filename(area_type='town_city', area_name='CAMBRIDGE', outcode=None, lat
         return area_type + '#' + area_name.replace(" ", "_").replace("'", "_") + '#' + start_date + '#' + end_date + '#'
 
 
+def normalize_year(date):
+    return (datetime.datetime.strptime(date, '%Y-%m-%d') - day_zero).days / 365.
+
+
+def comp_date(earlier, later):
+    return datetime.datetime.strptime(earlier, '%Y-%m-%d') <= datetime.datetime.strptime(later, '%Y-%m-%d')
+
+
+def add_days(date, days):
+    return (datetime.datetime.strptime(date, '%Y-%m-%d') + datetime.timedelta(days=days)).strftime('%Y-%m-%d')
+
+
+
 def isclose(x, y):
     return abs(x - y) <= Decimal('0.000001')
 
 
-def count_poi(p, poi_df, radius):
-    dists = poi_df['geometry'].distance(p['geometry'])
+def count_poi(p, poi, radius):
+    dists = poi.distance(p)
     return len(dists < radius)
 
 
-def dist_poi(p, poi_df, radius):
-    dists = poi_df['geometry'].distance(p)
+def dist_poi(p, poi, radius):
+    dists = poi.distance(p)
     dists = dists[dists < radius]
+
     if dists.empty:
-        return radius
+        dist = radius
     else:
-        return dists.min()
+        dist = dists.min()
+    return -(1 / radius) * dist + 1

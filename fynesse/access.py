@@ -8,21 +8,60 @@ import pymysql
 import urllib.request
 import osmnx as ox
 from os import path, mkdir, listdir
-from ipywidgets import interact_manual, Text, Password
 
 
-def initialize_database(conn):
-    with conn:
+def write_credentials(username, password):
+    with open("credentials.yaml", "w") as file:
+        credentials_dict = {'username': username,
+                            'password': password}
+        yaml.dump(credentials_dict, file)
+
+
+def get_credentials():
+    with open("credentials.yaml") as file:
+        credentials = yaml.safe_load(file)
+    return credentials["username"], credentials["password"]
+
+
+def create_directories():
+    directories = ('tables', 'datasets', 'maps', 'graphs')
+
+    for directory in directories:
+        if not path.exists(directory):
+            mkdir(directory)
+    print("Created directories\n")
+
+
+def create_connection():
+    conn = None
+    credentials = get_credentials()
+    try:
+        conn = pymysql.connect(user=credentials[0],
+                               password=credentials[1],
+                               host=config['database_url'],
+                               port=config['port'],
+                               local_infile=1)
+        return conn
+    except Exception as e:
+        print(f"Error connecting to the MariaDB Server: {e}")
+
+
+def initialize_database():
+    with create_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"""SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-                            SET time_zone = "+00:00";
-                            CREATE DATABASE IF NOT EXISTS property_prices DEFAULT CHARACTER SET utf8 COLLATE utf8_bin;
-                            USE property_prices""")
-            cur.commit()
+            cur.execute(f"""SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";""")
+            cur.execute(f"""SET time_zone = "+00:00";""")
+            cur.execute(f"""CREATE DATABASE IF NOT EXISTS property_prices DEFAULT 
+            CHARACTER SET utf8 COLLATE utf8_bin;""")
+            cur.execute(f"""USE property_prices""")
+            conn.commit()
+
+            print("Initialised database\n")
 
             # Price Paid Data
-            cur.execute(f"""DROP TABLE IF EXISTS `pp_data`;
-                            CREATE TABLE IF NOT EXISTS `pp_data` (
+            cur.execute(f"""DROP TABLE IF EXISTS pp_data""")
+            conn.commit()
+            cur.execute(f"""CREATE TABLE IF NOT EXISTS pp_data (
                               `transaction_unique_identifier` tinytext COLLATE utf8_bin NOT NULL,
                               `price` int(10) unsigned NOT NULL,
                               `date_of_transfer` date NOT NULL,
@@ -41,11 +80,14 @@ def initialize_database(conn):
                               `record_status` varchar(2) COLLATE utf8_bin NOT NULL,
                               `db_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY
                             )DEFAULT CHARSET=utf8 COLLATE=utf8_bin AUTO_INCREMENT=1;""")
-            cur.commit()
+            conn.commit()
+
+            print("Initialised price paid data table\n")
 
             # Postcode Data
-            cur.execute(f"""DROP TABLE IF EXISTS postcode_data;
-                            CREATE TABLE IF NOT EXISTS `postcode_data` (
+            cur.execute(f"""DROP TABLE IF EXISTS postcode_data""")
+            conn.commit()
+            cur.execute(f"""CREATE TABLE IF NOT EXISTS postcode_data (
                               `postcode` varchar(8) COLLATE utf8_bin NOT NULL,
                               `status` enum('live','terminated') NOT NULL,
                               `usertype` enum('small', 'large') NOT NULL,
@@ -65,34 +107,12 @@ def initialize_database(conn):
                               `incode` varchar(3)  COLLATE utf8_bin NOT NULL,
                               `db_id` bigint(20) unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY
                             ) DEFAULT CHARSET=utf8 COLLATE=utf8_bin;""")
-            cur.commit()
+            conn.commit()
+
+            print("Initialised postcode data table\n")
 
 
-def create_directories():
-    directories = ('tables', 'datasets', 'maps', 'graphs')
-
-    for directory in directories:
-        if not path.exists(directory):
-            mkdir(directory)
-
-
-def get_credentials():
-    global username, password
-    if not path.isfile("credentials.yaml"):
-        interact_manual(username=Text(description="Username:"), password=Password(description="Password:"))
-
-        with open("credentials.yaml", "w") as file:
-            credentials_dict = {'username': username,
-                                'password': password}
-            yaml.dump(credentials_dict, file)
-
-    with open("credentials.yaml") as file:
-        credentials = yaml.safe_load(file)
-    username = credentials["username"]
-    password = credentials["password"]
-
-
-def upload_price_paid_data(conn, year=1995):
+def upload_price_paid_data(year=1995):
     while True:
         filename = str(year) + ".csv"
         file_path = path.join(datasets, filename)
@@ -106,42 +126,47 @@ def upload_price_paid_data(conn, year=1995):
         else:
             print(filename + " has already been downloaded.\n")
 
-        with conn:
+        with create_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"""LOAD DATA LOCAL INFILE {file_path} 
+                cur.execute(f"""USE property_prices""")
+                cur.execute(f"""LOAD DATA LOCAL INFILE '{file_path}'
                                 INTO TABLE pp_data FIELDS TERMINATED BY ',' ENCLOSED BY '"'
                                 LINES STARTING BY '' TERMINATED BY '\n'""")
-                cur.commit()
+                conn.commit()
 
         year += 1
+    print("Uploaded all available price paid data\n")
 
 
-def upload_postcode_data(conn):
+def upload_postcode_data():
     postcode_file_path = path.join(datasets, 'open_postcode_geo.csv')
-    postcode_zip_path = path.join(datasets, 'open_postcode_geo.csv.zip')
+    postcode_zip_path = 'open_postcode_geo.csv.zip'
 
     if not path.exists(postcode_file_path):
-        opener = urllib.request.URLopener()
-        opener.addheader(('User-Agent', 'default'))
-        opener.retrieve(config['postcode_data_url'], postcode_zip_path)
-        opener.close()
+        opener = urllib.request.build_opener()
+        opener.addheaders = [('User-agent', 'Mozilla/5.0')]
+        urllib.request.install_opener(opener)
+        urllib.request.urlretrieve(config['postcode_data_url'], postcode_zip_path)
 
     with zipfile.ZipFile(postcode_zip_path, 'r') as zip_ref:
         zip_ref.extract('open_postcode_geo.csv', datasets)
     os.remove(postcode_zip_path)
 
-    with conn:
+    with create_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"""LOAD DATA LOCAL INFILE {postcode_file_path} INTO TABLE postcode_data
+            cur.execute(f"""USE property_prices""")
+            cur.execute(f"""LOAD DATA LOCAL INFILE '{postcode_file_path}' INTO TABLE postcode_data
                             FIELDS TERMINATED BY ',' 
                             LINES STARTING BY '' TERMINATED BY '\n';""")
-            cur.commit()
+            conn.commit()
+    print("Uploaded postcode data\n")
 
 
-def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', outcode=None, latitude=None, longitude=None, boxsize='0.1',
+def prices_coordinates_data(area_type='town_city', area_name='CAMBRIDGE', outcode=None, latitude=None,
+                            longitude=None, boxsize='0.1',
                             start_date='2013-01-01', end_date=str(this_year) + '-12-31'):
-
     print('Retrieving property data... this may take a while if not cached locally...\n')
+
 
     if latitude is not None and longitude is not None:
         two = Decimal(2)
@@ -176,6 +201,7 @@ def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', 
                    (lon_min_x < lon_min or isclose(lon_min_x, lon_min)) and \
                    (lat_max_x > lat_max or isclose(lat_max_x, lat_max)) and \
                    (lon_max_x > lon_max or isclose(lon_max_x, lon_max))
+
         type_predicate = tp
     elif outcode is not None:
         pp_condition = ""
@@ -194,11 +220,11 @@ def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', 
     for fn in listdir(tables):
         parts = fn.split('#')
         if type_predicate(parts) and date_predicate(parts):
-            with open(path.join(tables, fn)) as file:
-                return [line.rstrip() for line in file], False
+            return path.join(tables, fn), True
 
-    with conn:
+    with create_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute(f"""USE property_prices""")
             cur.execute(f"""SELECT pp.price, pp.date_of_transfer, pp.postcode, pp.property_type,
                             pp.new_build_flag, pp.tenure_type, pp.locality, pp.town_city, pp.district,
                             pp.county, pc.country, pc.latitude, pc.longitude
@@ -214,17 +240,18 @@ def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', 
             rows = cur.fetchall()
 
             with open(path.join(tables, filename), 'w', newline='') as file:
-                writer = csv.writer(file, delimiter=',', doublequote=False, lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
+                writer = csv.writer(file, delimiter=',', doublequote=False, lineterminator='\n',
+                                    quoting=csv.QUOTE_MINIMAL)
                 for row in rows:
                     writer.writerow(row)
-            return rows, True
+            return rows, False
 
 
 def road_data(north, south, east, west, network_type, custom_filter):
     _, edges = ox.graph_to_gdfs(ox.graph_from_bbox(north, south, east, west,
-                                network_type=network_type,
-                                truncate_by_edge=True,
-                                custom_filter=custom_filter))
+                                                   network_type=network_type,
+                                                   truncate_by_edge=True,
+                                                   custom_filter=custom_filter))
     return edges
 
 
@@ -238,9 +265,8 @@ def pois_data(north, south, east, west, tags):
 
 
 def init():
-    get_credentials()
     create_directories()
-    with create_connection() as conn:
-        initialize_database(conn)
-        upload_price_paid_data(conn)
-        upload_postcode_data(conn)
+    initialize_database()
+    upload_price_paid_data()
+    upload_postcode_data()
+    print('Finished initialisation\n')

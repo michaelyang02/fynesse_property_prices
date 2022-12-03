@@ -27,7 +27,7 @@ VERSION = "0.1.0"
 
 # What packages are required for this module to be executed?
 REQUIRED = [
-    "pandas", "numpy", "jupyter", "matplotlib", "yaml", "ipywidgets",
+    "pandas", "numpy", "jupyter", "matplotlib", "pyyaml", "ipywidgets",
     "pymysql", "osmnx", "geopandas", "IPython", "scikit-learn", "shapely"
 ]
 
@@ -36,7 +36,7 @@ EXTRAS = {
 
 }
 
-PACKAGE_DATA = {"fynesse_property_prices": ["defaults.yml"]}
+PACKAGE_DATA = {"fynesse": ["defaults.yml"]}
 
 # The rest you shouldn't have to touch too much :)
 # ------------------------------------------------

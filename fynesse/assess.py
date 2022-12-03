@@ -2,7 +2,6 @@ from .config import *
 from . import access
 from .utils import *
 
-from shapely.geometry import Point
 from matplotlib import pyplot as plt
 from IPython.display import display
 import numpy as np
@@ -15,16 +14,12 @@ figure = None
 graph = None
 
 
-def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', outcode=None, latitude=None, longitude=None, boxsize='0.1',
+def prices_coordinates_data(area_type='town_city', area_name='CAMBRIDGE', outcode=None, latitude=None, longitude=None, boxsize='0.1',
                             start_date='2013-01-01', end_date=str(this_year)+'-12-31'):
-    data, loaded_locally = access.prices_coordinates_data(conn, area_type, area_name, outcode, latitude, longitude,
+    data, loaded_locally = access.prices_coordinates_data(area_type, area_name, outcode, latitude, longitude,
                                                           boxsize, start_date, end_date)
-    df = pd.DataFrame(data, columns=['price', 'date of transfer', 'postcode', 'property type', 'new build flag',
-                                     'tenure type', 'locality', 'town/city', 'district', 'county', 'country',
-                                     'latitude', 'longitude'])
-
     if loaded_locally:
-        df = df.astype({"latitude": Decimal, "longitude": Decimal})
+        df = pd.read_csv(data, names=table_column_list, converters={'latitude': Decimal, 'longitude': Decimal})
         df = df.loc[df['date of transfer'].map(lambda d: comp_date(start_date, d) and comp_date(d, end_date))]
         if latitude is not None and longitude is not None:
             half = Decimal(0.5)
@@ -33,7 +28,8 @@ def prices_coordinates_data(conn, area_type='town_city', area_name='CAMBRIDGE', 
             boxsize = Decimal(boxsize)
             df = df.loc[(df['latitude'] >= latitude - half * boxsize) & (df['latitude'] < latitude + half * boxsize) &
                         (df['longitude'] >= longitude - half * boxsize) & (df['longitude'] < longitude + half * boxsize)]
-
+    else:
+        df = pd.DataFrame(data, columns=table_column_list)
     df['property type'] = df['property type'].map(property_type_map)
     return df
 
@@ -47,7 +43,7 @@ def road_data(north, south, east, west, network_type, custom_filter):
 def pois_data(north, south, east, west, tags):
     data = access.pois_data(north, south, east, west, tags)
     pois = gpd.GeoDataFrame(pd.concat(data, ignore_index=True))
-    pois['geometry'] = pois['geometry'].to_crs(3035).centroid
+    pois['geometry'] = pois['geometry'].to_crs(27700).centroid
     pois['geometry'] = pois['geometry'].to_crs(4326)
     return pois
 
@@ -134,11 +130,9 @@ def view_map(df, tags, display_name, display_size=15, latitude=None, longitude=N
 
 def view_queried_map(year_range, price_range, property_types, pois, display_name, display_size, lod,
                      area_type=None, area_name=None, outcode=None, latitude=None, longitude=None, boxsize=None):
-    with create_connection() as conn:
-        df = prices_coordinates_data(conn,
-                                     start_date=str(year_range[0]) + "-01-01", end_date=str(year_range[1])+"-12-31",
-                                     area_type=area_type, area_name=area_name, outcode=outcode,
-                                     latitude=latitude, longitude=longitude, boxsize=boxsize)
+    df = prices_coordinates_data(start_date=str(year_range[0]) + "-01-01", end_date=str(year_range[1])+"-12-31",
+                                 area_type=area_type, area_name=area_name, outcode=outcode,
+                                 latitude=latitude, longitude=longitude, boxsize=boxsize)
     df = df.loc[(df["price"] >= price_range[0]) & (df["price"] <= price_range[1])]
     df = df.loc[df["property type"].isin(property_types)]
     if df.empty:
@@ -258,10 +252,9 @@ def view_interactive_map():
 
 def view_queried_graph(year_range, property_types, display_size,
                        area_type=None, area_name=None, outcode=None, latitude=None, longitude=None, boxsize=None):
-    with create_connection() as conn:
-        df = prices_coordinates_data(conn, start_date=str(year_range[0]) + "-01-01", end_date=str(year_range[1]) + "-12-31",
-                                     area_type=area_type, area_name=area_name, outcode=outcode, latitude=latitude,
-                                     longitude=longitude, boxsize=boxsize)
+    df = prices_coordinates_data(start_date=str(year_range[0]) + "-01-01", end_date=str(year_range[1]) + "-12-31",
+                                 area_type=area_type, area_name=area_name, outcode=outcode, latitude=latitude,
+                                 longitude=longitude, boxsize=boxsize)
     df = df.loc[df["property type"].isin(property_types)]
 
     if df.empty:
@@ -294,9 +287,10 @@ def view_queried_graph(year_range, property_types, display_size,
         ax.plot(years, quantiles[1], color=color, label=ptype + ' 50%', marker='o')
         ax.plot(years, quantiles[2], color=color, label=ptype + ' 75%',
                 linestyle='--', alpha=0.5)
-        ax.fill_between(years, quantiles[0], quantiles[2], alpha=0.1, color=color)
+        ax.fill_between(years, quantiles[0], quantiles[2], alpha=0.2, color=color)
 
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1), prop={'size': 8})
+    ax.set_ylim(bottom=0)
     ax.text(1, -0.12, '© Crown copyright and database right 2021, Royal Mail copyright and database right 2022',
             horizontalalignment='right', verticalalignment='top', transform=ax.transAxes)
     fig.tight_layout()
@@ -342,7 +336,7 @@ def view_interactive_graph():
 
     year_range = widgets.IntRangeSlider(value=[2013, this_year], min=1995, max=this_year, step=1, description="Time range:",
                                         continuous_update=False)
-    display_size = widgets.IntSlider(value=10, min=8, max=15, step=1, description="Display size:",
+    display_size = widgets.IntSlider(value=10, min=8, max=25, step=1, description="Display size:",
                                      continuous_update=False)
     sliders = widgets.HBox([year_range, display_size], layout=widgets.Layout(grid_gap='10px'))
     property_types = widgets.SelectMultiple(
@@ -401,40 +395,49 @@ def view_interactive_graph():
     display(output)
 
 
-def labelled(latitude, longitude, boxsize, radius, predict):
-    with create_connection() as conn:
-        df = prices_coordinates_data(conn, latitude=latitude, longitude=longitude, boxsize=boxsize,
-                                     start_date='1995-01-01', end_date=str(this_year)+'-12-31')
+def labelled(latitude, longitude, date, property_type, boxsize, radius, days):
+    df = prices_coordinates_data(latitude=latitude, longitude=longitude, boxsize=boxsize,
+                                 start_date=add_days(date, -days),
+                                 end_date=add_days(date, days)
+                                 if comp_date(add_days(date, days), str(this_year)+'-12-31')
+                                 else str(this_year)+'-12-31')
 
-    normalized_day = df['date of transfer'].apply(normalize_day).to_numpy()
-    ind = [np.where(df['property type'] == pt, 1, 0) for pt in property_types_list]
-    ind_day = ind * normalized_day
-    ind_day_2 = ind * np.square(normalized_day)
-    ind_day_3 = ind * np.power(normalized_day, 3)
+    print("Constructing features...\n")
+
+    normalized_year = np.append(df['date of transfer'].apply(normalize_year).to_numpy(), normalize_year(date))
+    property_type = property_type_map[property_type]
+    ptype = np.append(df['property type'], property_type)
+
+    ptype_ind_0 = np.array([np.where(ptype == pt, 1, 0) for pt in property_types_list])
+    ptype_ind_1 = ptype_ind_0 * normalized_year
+    ptype_ind_2 = ptype_ind_0 * np.square(normalized_year)
 
     half = Decimal(0.5)
     latitude = Decimal(latitude)
     longitude = Decimal(longitude)
     boxsize = Decimal(boxsize)
+    radius = Decimal(radius)
 
     north = latitude + half * boxsize + radius
     south = latitude - half * boxsize - radius
     east = longitude + half * boxsize + radius
     west = longitude - half * boxsize - radius
 
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.longitude, df.latitude))
-    pois = [pois_data(north, south, east, west, i) for i in config['poi_map'].items()]
+    lats = df['latitude']
+    lats.loc[lats.index.max() + 1] = latitude
+    lons = df['longitude']
+    lons.loc[lons.index.max() + 1] = longitude
 
-    number_of_pois = [gdf.apply(lambda p: count_poi(p['geometry'], poi, radius), axis=1) for poi in pois]
-    distance_to_closest_pois = [gdf.apply(lambda p: dist_poi(p, poi, radius), axis=1) for poi in pois]
+    properties = gpd.points_from_xy(lons, lats, crs=27700).to_numpy()
 
-    (lat, lon, date, ptype) = predict
-    i0 = [1 if ptype == pt else 0 for pt in property_types_list]
-    i1 = i0 * normalize_day(date)
-    i2 = i0 * np.square(normalize_day(date))
-    i3 = i0 * np.power(normalize_day(date), 3)
-    nop = [count_poi(Point(lon, lat), poi, radius) for poi in pois]
-    dtcp = [dist_poi(Point(lon, lat), poi, radius) for poi in pois]
+    pois = [pois_data(north, south, east, west, [i]).to_crs(27700)['geometry'] for i in config['poi_map'].items()]
 
-    return (np.column_stack([*ind, *ind_day, *ind_day_2, *ind_day_3, *number_of_pois, *distance_to_closest_pois]),
-            df['price'].to_numpy(), np.column_stack([*i0, *i1, *i2, *i3, *nop, *dtcp]))
+    vc = np.vectorize(count_poi, excluded=['poi', 'radius'])
+    vd = np.vectorize(dist_poi, excluded=['poi', 'radius'])
+
+    number_of_pois = [vc(properties, poi=poi, radius=radius) for poi in pois]
+    distance_to_closest_pois = [vd(properties, poi=poi, radius=radius) for poi in pois]
+
+    design_matrix = np.column_stack([*ptype_ind_0, *ptype_ind_1, *ptype_ind_2, *number_of_pois, *distance_to_closest_pois])
+    print(design_matrix)
+    return design_matrix, df['price'].to_numpy(), lats.to_numpy(), lons.to_numpy(), normalized_year, ptype
