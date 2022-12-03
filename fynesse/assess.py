@@ -428,7 +428,9 @@ def labelled(latitude, longitude, date, property_type, boxsize, radius, days):
     lons = df['longitude']
     lons.loc[lons.index.max() + 1] = longitude
 
-    properties = gpd.points_from_xy(lons, lats, crs=27700).to_numpy()
+    properties = gpd.points_from_xy(lons, lats)
+    properties.crs = 4326
+    properties = properties.to_crs(27700).to_numpy()
 
     pois = [pois_data(north, south, east, west, [i]).to_crs(27700)['geometry'] for i in config['poi_map'].items()]
 
@@ -439,5 +441,4 @@ def labelled(latitude, longitude, date, property_type, boxsize, radius, days):
     distance_to_closest_pois = [vd(properties, poi=poi, radius=radius) for poi in pois]
 
     design_matrix = np.column_stack([*ptype_ind_0, *ptype_ind_1, *ptype_ind_2, *number_of_pois, *distance_to_closest_pois])
-    print(design_matrix)
     return design_matrix, df['price'].to_numpy(), lats.to_numpy(), lons.to_numpy(), normalized_year, ptype

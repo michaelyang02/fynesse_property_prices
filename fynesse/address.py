@@ -10,7 +10,7 @@ def predict_price(latitude, longitude, date, property_type):
     return predict_price_spec(latitude, longitude, date, property_type)
 
 
-def predict_price_spec(latitude, longitude, date, property_type, boxsize=0.09, radius=0.09, half_days=1800, sample_size=100):
+def predict_price_spec(latitude, longitude, date, property_type, boxsize=0.05, radius=0.03, half_days=1800, sample_size=100):
     model = sklearn.linear_model.LinearRegression(fit_intercept=False)
 
     labelled_data = assess.labelled(latitude, longitude, date, property_type, boxsize, radius, half_days)
@@ -33,5 +33,8 @@ def predict_price_spec(latitude, longitude, date, property_type, boxsize=0.09, r
     print("\nPredicted property price:\n")
     [pred] = model.predict(labelled_data[0][-1].reshape(1, -1))
     print(int(pred))
+    if len(labelled_data[0][:-1]) < 100 or squared_sum / sample_size > 100:
+        print("\nQuality of model is poor.\n")
+
     return int(pred)
 

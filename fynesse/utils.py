@@ -75,14 +75,15 @@ def isclose(x, y):
 
 
 def count_poi(p, poi, radius):
+    radius = radius * 111000
     dists = poi.distance(p)
     return len(dists < radius)
 
 
 def dist_poi(p, poi, radius):
+    radius = float(radius * 111000)
     dists = poi.distance(p)
     dists = dists[dists < radius]
-
     if dists.empty:
         dist = radius
     else:
